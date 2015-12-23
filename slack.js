@@ -9,9 +9,15 @@ function Slack(options) {
     this.token = options.token;
     if( options.defaultChannel ) this.defaultChannel = options.defaultChannel;
   }
+  this.disabled = false;
 }
 
 Slack.prototype.send = function(message,cb) {
+  if (this.disabled) {
+    console.log(new Date(), 'Slack integration temporarily disabled. Message not sent: ' + message);
+    return cb(); // do not send error to prevent cycling
+  }
+
   if( !( message && message instanceof Object && message.text ) ) {
     if( cb && cb instanceof Function ) return cb(new Error('No message'));
     return 'No message';
@@ -34,7 +40,19 @@ Slack.prototype.send = function(message,cb) {
     body: JSON.stringify(options)
   };
 
+  var self = this;
   request.post(requestParams, function(err,res,body) {
+    //Too many requests
+
+    if (res.statusCode == 429) {
+      console.log(new Date(), 'Disabling Slack integration, too many messages. Integration will be enabled in one minute.');
+      self.disabled = true;
+      // Wait one minute to enable again
+      setTimeout(function () {
+        self.disabled = false;
+      }, 60 * 1000);
+    }
+
     if(err || body != 'ok') {
       if( cb && cb instanceof Function ) return cb(err || body);
     }
